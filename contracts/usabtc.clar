@@ -60,9 +60,14 @@
 ;; SIP-010 transfer
 (define-public (transfer (amount uint) (sender principal) (recipient principal) (memo (optional (buff 34))))
   (begin
+    ;; check ownership
     (asserts! (is-eq tx-sender sender) ERR_NOT_TOKEN_OWNER)
-    (asserts! (>= (get-balance sender) amount) ERR_INSUFFICIENT_BALANCE)
-    (try! (ft-transfer? usabtc amount sender recipient))
+    ;; print memo (legacy)
+    (if (is-some memo)
+      (print memo)
+      none
+    )
+    ;; print event
     (print {
       notification: "usabtc-transfer",
       payload: {
@@ -72,7 +77,8 @@
         memo: memo
       }
     })
-    (ok true)
+    ;; make transfer
+    (ft-transfer? usabtc amount sender recipient)
   )
 )
 
@@ -96,11 +102,13 @@
 
 (define-public (withdraw (amount uint))
   (let (
+    (user-balance (unwrap-panic (get-balance  tx-sender)))
     (exit-amount (- amount (/ (* amount (var-get exit-tax)) u10000)))
     (tax-amount (/ (* amount (var-get exit-tax)) u10000))
   )
-    (asserts! (>= (get-balance tx-sender) amount) ERR_INSUFFICIENT_BALANCE)
+    (asserts! (>= user-balance amount) ERR_INSUFFICIENT_BALANCE)
     (try! (ft-burn? usabtc amount tx-sender))
+    ;; TODO: fix (as-contract) context here
     (try! (as-contract (contract-call? .sbtc-token transfer exit-amount tx-sender tx-sender none)))
     (try! (as-contract (contract-call? .sbtc-token transfer tax-amount tx-sender (var-get destination-wallet) none)))
     (print {
