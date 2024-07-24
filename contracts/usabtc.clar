@@ -1,41 +1,23 @@
 
-;; title: usabtc
-;; version:
-;; summary:
-;; description:
+;; title: USABTC Token Contract
+;; version: 1.0.0
+;; summary: USABTC is a specialized fungible token implemented on the Stacks blockchain.
+;; description: USABTC is designed to provide a unique economic mechanism that bridges Bitcoin and the US financial system through the decentralized and secure Stacks network. USABTC maintains a 1:1 relationship with sBTC.
 
 ;; traits
 ;;
+(impl-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
 
 ;; token definitions
 ;;
+(define-fungible-token usabtc)
 
 ;; constants
 ;;
-
-;; data vars
-;;
-
-;; data maps
-;;
-
-;; public functions
-;;
-
-;; read only functions
-;;
-
-;; private functions
-;;
-
-;; USABTC Token Contract
-;; Implements SIP-010 Fungible Token Standard
-;; 1:1 relationship with sBTC
-
-(impl-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
-
-;; Constants
 (define-constant CONTRACT_OWNER tx-sender)
+(define-constant VOTE_SCALE_FACTOR (pow u10 u16)) ;; 16 decimal places
+
+;; error codes
 (define-constant ERR_UNAUTHORIZED (err u1000))
 (define-constant ERR_NOT_TOKEN_OWNER (err u1001))
 (define-constant ERR_INSUFFICIENT_BALANCE (err u1002))
@@ -47,16 +29,15 @@
 (define-constant ERR_USER_NOT_FOUND (err u1008))
 (define-constant ERR_VOTE_FAILED (err u1009))
 
-;; Token definition
-(define-fungible-token usabtc)
 
-;; Data variables
+;; data vars
+;;
 (define-data-var token-uri (optional (string-utf8 256)) (some u"https://usabtc.org/token-metadata.json"))
 (define-data-var exit-tax uint u0) ;; Stored as basis points (e.g., 500 = 5%)
 (define-data-var destination-wallet principal CONTRACT_OWNER)
 (define-data-var trust-voting-wallet principal CONTRACT_OWNER)
 
-;; Voting-related variables
+;; voting-related variables
 (define-data-var voteActive bool false)
 (define-data-var voteStart uint u0)
 (define-data-var voteEnd uint u0)
@@ -66,17 +47,17 @@
 (define-data-var noVotes uint u0)
 (define-data-var noTotal uint u0)
 
-;; Voting constants
-(define-constant VOTE_SCALE_FACTOR (pow u10 u16)) ;; 16 decimal places
-
-;; Data maps
+;; data maps
+;;
 (define-map UserVotes
   { user: principal, proposal: uint }
   { vote: bool, amount: uint }
 )
 
-;; SIP-010 Functions
+;; public functions
+;;
 
+;; SIP-010 transfer
 (define-public (transfer (amount uint) (sender principal) (recipient principal) (memo (optional (buff 34))))
   (begin
     (asserts! (is-eq tx-sender sender) ERR_NOT_TOKEN_OWNER)
@@ -93,30 +74,6 @@
     })
     (ok true)
   )
-)
-
-(define-read-only (get-name)
-  (ok "USABTC")
-)
-
-(define-read-only (get-symbol)
-  (ok "USABTC")
-)
-
-(define-read-only (get-decimals)
-  (ok u8)
-)
-
-(define-read-only (get-balance (who principal))
-  (ok (ft-get-balance usabtc who))
-)
-
-(define-read-only (get-total-supply)
-  (ok (ft-get-supply usabtc))
-)
-
-(define-read-only (get-token-uri)
-  (ok (var-get token-uri))
 )
 
 ;; USABTC-specific functions
@@ -159,7 +116,40 @@
   )
 )
 
-;; Voting functions
+
+;; governance functions
+
+(define-public (set-exit-tax (new-exit-tax uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get trust-voting-wallet)) ERR_UNAUTHORIZED)
+    (asserts! (not (var-get voteActive)) ERR_PROPOSAL_STILL_ACTIVE)
+    (var-set exit-tax new-exit-tax)
+    (print {
+      notification: "usabtc-exit-tax-update",
+      payload: {
+        new-exit-tax: new-exit-tax
+      }
+    })
+    (ok true)
+  )
+)
+
+(define-public (set-destination-wallet (new-destination-wallet principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get trust-voting-wallet)) ERR_UNAUTHORIZED)
+    (asserts! (not (var-get voteActive)) ERR_PROPOSAL_STILL_ACTIVE)
+    (var-set destination-wallet new-destination-wallet)
+    (print {
+      notification: "usabtc-destination-wallet-update",
+      payload: {
+        new-destination-wallet: new-destination-wallet
+      }
+    })
+    (ok true)
+  )
+)
+
+;; voting functions
 
 (define-public (start-vote (proposal-id uint))
   (begin
@@ -252,39 +242,32 @@
   )
 )
 
-;; Governance functions
+;; read only functions
+;;
 
-(define-public (set-exit-tax (new-exit-tax uint))
-  (begin
-    (asserts! (is-eq tx-sender (var-get trust-voting-wallet)) ERR_UNAUTHORIZED)
-    (asserts! (not (var-get voteActive)) ERR_PROPOSAL_STILL_ACTIVE)
-    (var-set exit-tax new-exit-tax)
-    (print {
-      notification: "usabtc-exit-tax-update",
-      payload: {
-        new-exit-tax: new-exit-tax
-      }
-    })
-    (ok true)
-  )
+(define-read-only (get-name)
+  (ok "USABTC")
 )
 
-(define-public (set-destination-wallet (new-destination-wallet principal))
-  (begin
-    (asserts! (is-eq tx-sender (var-get trust-voting-wallet)) ERR_UNAUTHORIZED)
-    (asserts! (not (var-get voteActive)) ERR_PROPOSAL_STILL_ACTIVE)
-    (var-set destination-wallet new-destination-wallet)
-    (print {
-      notification: "usabtc-destination-wallet-update",
-      payload: {
-        new-destination-wallet: new-destination-wallet
-      }
-    })
-    (ok true)
-  )
+(define-read-only (get-symbol)
+  (ok "USABTC")
 )
 
-;; Initialize the contract
-(begin
-  ;; No initial minting is needed as USABTC is created only when sBTC is deposited
+(define-read-only (get-decimals)
+  (ok u8)
 )
+
+(define-read-only (get-balance (who principal))
+  (ok (ft-get-balance usabtc who))
+)
+
+(define-read-only (get-total-supply)
+  (ok (ft-get-supply usabtc))
+)
+
+(define-read-only (get-token-uri)
+  (ok (var-get token-uri))
+)
+
+;; private functions
+;;
