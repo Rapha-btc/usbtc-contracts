@@ -98,6 +98,16 @@
 	)
 )
 
+;; #[allow(unchecked_data)]
+(define-public (test-mint (amount uint) (recipient principal))
+	(ft-mint? sbtc-token amount recipient)
+)
+
+;; #[allow(unchecked_data)]
+(define-public (test-burn (amount uint) (owner principal))
+	(ft-burn? sbtc-token amount owner)
+)
+
 ;; --- Public functions
 
 ;; sip-010-trait
