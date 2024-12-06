@@ -2,7 +2,9 @@
 ;; title: USABTC Token Contract
 ;; version: 1.0.0
 ;; summary: USABTC is a specialized fungible token implemented on the Stacks blockchain.
-;; description: USABTC is designed to provide a unique economic mechanism that bridges Bitcoin and the US financial system through the decentralized and secure Stacks network. USABTC maintains a 1:1 relationship with sBTC.
+;; description: USABTC is designed to provide a unique economic mechanism that bridges Bitcoin
+;; and the US financial system through the decentralized and secure Stacks network. USABTC
+;; maintains a 1:1 relationship with sBTC.
 
 ;; traits
 ;;
@@ -15,7 +17,7 @@
 ;; constants
 ;;
 (define-constant CONTRACT_OWNER tx-sender)
-(define-constant VOTE_SCALE_FACTOR (pow u10 u16)) ;; 16 decimal places
+(define-constant USABTC_EXIT_TAX u2100) ;; 21% exit tax
 
 ;; error codes
 (define-constant ERR_UNAUTHORIZED (err u1000))
@@ -33,26 +35,13 @@
 ;; data vars
 ;;
 (define-data-var token-uri (optional (string-utf8 256)) (some u"https://usabtc.org/token-metadata.json"))
-(define-data-var exit-tax uint u0) ;; Stored as basis points (e.g., 500 = 5%)
+(define-data-var active-exit-tax uint u0)
 (define-data-var destination-wallet principal CONTRACT_OWNER)
-(define-data-var trust-voting-wallet principal CONTRACT_OWNER)
-
-;; voting-related variables
-(define-data-var voteActive bool false)
-(define-data-var voteStart uint u0)
-(define-data-var voteEnd uint u0)
-(define-data-var proposalId uint u0)
-(define-data-var yesVotes uint u0)
-(define-data-var yesTotal uint u0)
-(define-data-var noVotes uint u0)
-(define-data-var noTotal uint u0)
+(define-data-var custodian-trust-wallet principal CONTRACT_OWNER)
 
 ;; data maps
 ;;
-(define-map UserVotes
-  { user: principal, proposal: uint }
-  { vote: bool, amount: uint }
-)
+;; TBD
 
 ;; public functions
 ;;
@@ -103,8 +92,8 @@
 (define-public (withdraw (amount uint))
   (let (
     (user-balance (unwrap-panic (get-balance  tx-sender)))
-    (exit-amount (- amount (/ (* amount (var-get exit-tax)) u10000)))
-    (tax-amount (/ (* amount (var-get exit-tax)) u10000))
+    (exit-amount (- amount (/ (* amount (var-get active-exit-tax)) u10000)))
+    (tax-amount (/ (* amount (var-get active-exit-tax)) u10000))
   )
     (asserts! (>= user-balance amount) ERR_INSUFFICIENT_BALANCE)
     (try! (ft-burn? usabtc amount tx-sender))
@@ -127,131 +116,53 @@
 
 ;; governance functions
 
-(define-public (set-exit-tax (new-exit-tax uint))
+(define-public (enable-exit-tax)
   (begin
-    (asserts! (is-eq tx-sender (var-get trust-voting-wallet)) ERR_UNAUTHORIZED)
-    (asserts! (not (var-get voteActive)) ERR_PROPOSAL_STILL_ACTIVE)
-    (var-set exit-tax new-exit-tax)
+    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
+    (var-set active-exit-tax USABTC_EXIT_TAX)
     (print {
-      notification: "usabtc-exit-tax-update",
+      notification: "usabtc-exit-tax-enabled",
       payload: {
-        new-exit-tax: new-exit-tax
+        active-exit-tax: USABTC_EXIT_TAX
       }
     })
     (ok true)
   )
 )
 
-(define-public (set-destination-wallet (new-destination-wallet principal))
+(define-public (disable-exit-tax)
   (begin
-    (asserts! (is-eq tx-sender (var-get trust-voting-wallet)) ERR_UNAUTHORIZED)
-    (asserts! (not (var-get voteActive)) ERR_PROPOSAL_STILL_ACTIVE)
-    (var-set destination-wallet new-destination-wallet)
+    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
+    (var-set active-exit-tax u0)
     (print {
-      notification: "usabtc-destination-wallet-update",
+      notification: "usabtc-exit-tax-enabled",
       payload: {
-        new-destination-wallet: new-destination-wallet
+        active-exit-tax: u0
       }
     })
     (ok true)
   )
 )
 
-;; voting functions
-
-(define-public (start-vote (proposal-id uint))
+(define-public (set-custodian-wallet (new-custodian-wallet principal))
   (begin
-    (asserts! (is-eq tx-sender (var-get trust-voting-wallet)) ERR_UNAUTHORIZED)
-    (asserts! (not (var-get voteActive)) ERR_PROPOSAL_STILL_ACTIVE)
-    (var-set voteActive true)
-    (var-set voteStart block-height)
-    (var-set proposalId proposal-id)
-    (var-set yesVotes u0)
-    (var-set yesTotal u0)
-    (var-set noVotes u0)
-    (var-set noTotal u0)
+    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
+    (asserts! (not (is-eq (var-get custodian-trust-wallet) new-custodian-wallet)) ERR_UNAUTHORIZED)
+    (var-set destination-wallet new-custodian-wallet)
     (print {
-      notification: "usabtc-vote-start",
+      notification: "usabtc-custodian-wallet-update",
       payload: {
-        proposal-id: proposal-id,
-        start-block: block-height
+        new-custodian-wallet: new-custodian-wallet
       }
     })
     (ok true)
-  )
-)
-
-(define-public (vote-on-proposal (vote bool))
-  (let (
-    (voter-balance (ft-get-balance usabtc tx-sender))
-    (voter-record (map-get? UserVotes { user: tx-sender, proposal: (var-get proposalId) }))
-  )
-    (asserts! (var-get voteActive) ERR_PROPOSAL_NOT_ACTIVE)
-    (asserts! (> voter-balance u0) ERR_NOTHING_STACKED)
-    (match voter-record prev-vote
-      (begin
-        (asserts! (not (is-eq (get vote prev-vote) vote)) ERR_VOTED_ALREADY)
-        (map-set UserVotes { user: tx-sender, proposal: (var-get proposalId) } { vote: vote, amount: voter-balance })
-        (if (get vote prev-vote)
-          (begin
-            (var-set yesVotes (- (var-get yesVotes) u1))
-            (var-set yesTotal (- (var-get yesTotal) (get amount prev-vote)))
-          )
-          (begin
-            (var-set noVotes (- (var-get noVotes) u1))
-            (var-set noTotal (- (var-get noTotal) (get amount prev-vote)))
-          )
-        )
-      )
-      (map-insert UserVotes { user: tx-sender, proposal: (var-get proposalId) } { vote: vote, amount: voter-balance })
-    )
-    (if vote
-      (begin
-        (var-set yesVotes (+ (var-get yesVotes) u1))
-        (var-set yesTotal (+ (var-get yesTotal) voter-balance))
-      )
-      (begin
-        (var-set noVotes (+ (var-get noVotes) u1))
-        (var-set noTotal (+ (var-get noTotal) voter-balance))
-      )
-    )
-    (print {
-      notification: "usabtc-vote",
-      payload: {
-        user: tx-sender,
-        proposal-id: (var-get proposalId),
-        vote: vote,
-        amount: voter-balance
-      }
-    })
-    (ok true)
-  )
-)
-
-(define-public (end-vote)
-  (begin
-    (asserts! (var-get voteActive) ERR_PROPOSAL_NOT_ACTIVE)
-    (asserts! (> (+ (var-get yesVotes) (var-get noVotes)) u0) ERR_VOTE_FAILED)
-    (var-set voteActive false)
-    (var-set voteEnd block-height)
-    (print {
-      notification: "usabtc-vote-end",
-      payload: {
-        proposal-id: (var-get proposalId),
-        end-block: block-height,
-        yes-votes: (var-get yesVotes),
-        yes-total: (var-get yesTotal),
-        no-votes: (var-get noVotes),
-        no-total: (var-get noTotal),
-        result: (> (var-get yesTotal) (var-get noTotal))
-      }
-    })
-    (ok (> (var-get yesTotal) (var-get noTotal)))
   )
 )
 
 ;; read only functions
 ;;
+
+;; SIP-010 read-only functions
 
 (define-read-only (get-name)
   (ok "USABTC")
