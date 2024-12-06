@@ -37,7 +37,7 @@
 (define-constant CONTRACT_OWNER tx-sender)
 (define-constant USABTC_CONTRACT (as-contract tx-sender))
 
-;; 21% exit tax
+;; exit tax
 (define-constant USABTC_EXIT_TAX u2100) ;; 21% exit tax
 (define-constant EXIT_TAX_DELAY u21000) ;; approx 4.8 months in Bitcoin block time
 
@@ -120,8 +120,6 @@
       (custodian (var-get custodian-trust-wallet))
       (sender tx-sender)
       (sender-balance (unwrap-panic (get-balance sender)))
-      ;; TODO: review using better precision
-      ;; TODO: use previous-exit-tax if active-exit-tax is not active
       ;; calculate exit tax amount and remaining amount
       (exit-tax-amount (get-exit-tax-for-amount amount))
       (amount-after-tax (- amount exit-tax-amount))
@@ -156,10 +154,13 @@
 
 (define-public (enable-exit-tax)
   (begin
+    ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
+    ;; set exit tax values
     (var-set previous-exit-tax (var-get active-exit-tax))
     (var-set active-exit-tax USABTC_EXIT_TAX)
     (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
+    ;; print event
     (print {
       notification: "usabtc-exit-tax-enabled",
       payload: {
@@ -174,11 +175,14 @@
 
 (define-public (disable-exit-tax)
   (begin
+    ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
+    ;; set exit tax values
     (var-set previous-exit-tax (var-get active-exit-tax))
     (var-set active-exit-tax u0)
     ;; TODO: could make this no delay?
     (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
+    ;; print event
     (print {
       notification: "usabtc-exit-tax-disabled",
       payload: {
@@ -193,9 +197,13 @@
 
 (define-public (update-custodian-wallet (new-custodian-wallet principal))
   (begin
+    ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
+    ;; verify new custodian is not the same as the current custodian
     (asserts! (not (is-eq (var-get custodian-trust-wallet) new-custodian-wallet)) ERR_SAME_AS_CURRENT_CUSTODIAN)
+    ;; update custodian wallet
     (var-set custodian-trust-wallet new-custodian-wallet)
+    ;; print event
     (print {
       notification: "usabtc-custodian-wallet-updated",
       payload: {
@@ -230,7 +238,7 @@
 )
 
 (define-read-only (get-exit-tax-for-amount (amount uint))
-  ;; TODO: review precision
+  ;; TODO: review using better precision
   (if (>= burn-block-height (var-get active-exit-tax-activation-block))
     ;; tax is active
     (/ (* amount (var-get active-exit-tax)) u10000)
@@ -270,6 +278,3 @@
 (define-read-only (get-token-uri)
   (ok (var-get token-uri))
 )
-
-;; private functions
-;;
