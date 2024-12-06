@@ -32,8 +32,6 @@
 ;; constants
 ;;
 
-;; TODO: can use custodian wallet directly before deployment
-;; CONTRACT_OWNER used for now, or for deploy then set later
 (define-constant CONTRACT_OWNER tx-sender)
 (define-constant USABTC_CONTRACT (as-contract tx-sender))
 
@@ -59,8 +57,7 @@
 (define-data-var active-exit-tax uint u0)
 (define-data-var active-exit-tax-activation-block uint u0)
 ;; destination wallet for exit tax funds and responsibilities
-;; TODO: can use custodian wallet directly before deployment
-;; CONTRACT_OWNER used for now, or for deploy then set later
+;; temporarily set to deployer and blocked from enabling exit tax
 (define-data-var custodian-trust-wallet principal CONTRACT_OWNER)
 
 ;; public functions
@@ -154,6 +151,8 @@
 
 (define-public (enable-exit-tax)
   (begin
+    ;; verify sender is not deployer
+    (asserts! (not (is-eq tx-sender CONTRACT_OWNER)) ERR_NOT_CUSTODIAN_WALLET)
     ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
     ;; set exit tax values
@@ -175,6 +174,8 @@
 
 (define-public (disable-exit-tax)
   (begin
+    ;; verify sender is not deployer
+    (asserts! (not (is-eq tx-sender CONTRACT_OWNER)) ERR_NOT_CUSTODIAN_WALLET)
     ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
     ;; set exit tax values
