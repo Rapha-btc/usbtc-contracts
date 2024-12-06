@@ -63,7 +63,7 @@
 ;; holds the active exit tax used in calculations
 (define-data-var previous-exit-tax uint u0)
 (define-data-var active-exit-tax uint u0)
-(define-data-var active-exit-tax-activation uint u0)
+(define-data-var active-exit-tax-activation-block uint u0)
 ;; destination wallet for exit tax funds and responsibilities
 ;; TODO: can use custodian wallet directly before deployment
 ;; CONTRACT_OWNER used for now, or for deploy then set later
@@ -91,10 +91,10 @@
     (print {
       notification: "usabtc-transfer",
       payload: {
-        sender: sender,
-        recipient: recipient,
         amount: amount,
-        memo: memo
+        memo: memo,
+        recipient: recipient,
+        sender: sender
       }
     })
     ;; make transfer
@@ -116,8 +116,8 @@
     (print {
       notification: "usabtc-deposit",
       payload: {
-        user: tx-sender,
-        amount: amount
+        amount: amount,
+        sender: tx-sender
       }
     })
     (ok true)
@@ -126,23 +126,24 @@
 
 (define-public (withdraw (amount uint))
   (let (
-    (user-balance (unwrap-panic (get-balance  tx-sender)))
+    (sender-balance (unwrap-panic (get-balance tx-sender)))
     ;; TODO: review using better precision
+    ;; TODO: use previous-exit-tax if active-exit-tax is not active
     (exit-amount (- amount (/ (* amount (var-get active-exit-tax)) u10000)))
     (tax-amount (/ (* amount (var-get active-exit-tax)) u10000))
   )
-    (asserts! (>= user-balance amount) ERR_INSUFFICIENT_BALANCE)
+    (asserts! (>= sender-balance amount) ERR_INSUFFICIENT_BALANCE)
     (try! (ft-burn? usabtc amount tx-sender))
     ;; TODO: fix (as-contract) context here
     (try! (as-contract (contract-call? .sbtc-token transfer exit-amount tx-sender tx-sender none)))
     (try! (as-contract (contract-call? .sbtc-token transfer tax-amount tx-sender (var-get destination-wallet) none)))
     (print {
-      notification: "usabtc-withdraw",
+      notification: "usabtc-withdrawal",
       payload: {
-        user: tx-sender,
         amount: amount,
         exit-amount: exit-amount,
-        tax-amount: tax-amount
+        sender: tx-sender,
+        tax-amount: tax-amount,
       }
     })
     (ok true)
@@ -157,11 +158,13 @@
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
     (var-set previous-exit-tax (var-get active-exit-tax))
     (var-set active-exit-tax USABTC_EXIT_TAX)
-    (var-set active-exit-tax-activation (+ (burn-block-height) EXIT_TAX_DELAY))
+    (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
     (print {
       notification: "usabtc-exit-tax-enabled",
       payload: {
-        active-exit-tax: USABTC_EXIT_TAX
+        activation-block: (var-get active-exit-tax-activation-block),
+        active-exit-tax: USABTC_EXIT_TAX,
+        previous-exit-tax: (var-get previous-exit-tax)
       }
     })
     (ok true)
@@ -174,26 +177,29 @@
     (var-set previous-exit-tax (var-get active-exit-tax))
     (var-set active-exit-tax u0)
     ;; TODO: could make this no delay?
-    (var-set active-exit-tax-activation (+ (burn-block-height) EXIT_TAX_DELAY))
+    (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
     (print {
       notification: "usabtc-exit-tax-disabled",
       payload: {
-        active-exit-tax: u0
+        activation-block: (var-get active-exit-tax-activation-block),
+        active-exit-tax: u0,
+        previous-exit-tax: (var-get previous-exit-tax)
       }
     })
     (ok true)
   )
 )
 
-(define-public (set-custodian-wallet (new-custodian-wallet principal))
+(define-public (update-custodian-wallet (new-custodian-wallet principal))
   (begin
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
     (asserts! (not (is-eq (var-get custodian-trust-wallet) new-custodian-wallet)) ERR_UNAUTHORIZED)
     (var-set destination-wallet new-custodian-wallet)
     (print {
-      notification: "usabtc-custodian-wallet-update",
+      notification: "usabtc-update-custodian-wallet",
       payload: {
-        new-custodian-wallet: new-custodian-wallet
+        custodian-trust-wallet: new-custodian-wallet,
+        previous-custodian-wallet: (var-get custodian-trust-wallet)
       }
     })
     (ok true)
