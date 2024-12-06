@@ -61,18 +61,14 @@
 ;; TODO: decide home for metadata. ordinal? IPFS? URL?
 (define-data-var token-uri (optional (string-utf8 256)) (some u"https://usabtc.org/token-metadata.json"))
 ;; holds the active exit tax used in calculations
+;; exit task starts at 0% until activated, always 21% or 0%
 (define-data-var previous-exit-tax uint u0)
 (define-data-var active-exit-tax uint u0)
 (define-data-var active-exit-tax-activation-block uint u0)
 ;; destination wallet for exit tax funds and responsibilities
 ;; TODO: can use custodian wallet directly before deployment
 ;; CONTRACT_OWNER used for now, or for deploy then set later
-(define-data-var destination-wallet principal CONTRACT_OWNER)
 (define-data-var custodian-trust-wallet principal CONTRACT_OWNER)
-
-;; data maps
-;;
-;; TBD
 
 ;; public functions
 ;;
@@ -125,31 +121,43 @@
 )
 
 (define-public (withdraw (amount uint))
-  (let (
-    (sender-balance (unwrap-panic (get-balance tx-sender)))
-    ;; TODO: review using better precision
-    ;; TODO: use previous-exit-tax if active-exit-tax is not active
-    (exit-amount (- amount (/ (* amount (var-get active-exit-tax)) u10000)))
-    (tax-amount (/ (* amount (var-get active-exit-tax)) u10000))
-  )
+  (let
+    (
+      ;; custodian and sender information
+      (custodian (var-get custodian-trust-wallet))
+      (sender tx-sender)
+      (sender-balance (unwrap-panic (get-balance sender)))
+      ;; TODO: review using better precision
+      ;; TODO: use previous-exit-tax if active-exit-tax is not active
+      ;; calculate exit tax amount and remaining amount
+      (exit-tax-amount (get-exit-tax-for-amount amount))
+      (amount-after-tax (- amount exit-tax-amount))
+    )
+    ;; check that user has enough USABTC
     (asserts! (>= sender-balance amount) ERR_INSUFFICIENT_BALANCE)
-    (try! (ft-burn? usabtc amount tx-sender))
-    ;; TODO: fix (as-contract) context here
-    (try! (as-contract (contract-call? .sbtc-token transfer exit-amount tx-sender tx-sender none)))
-    (try! (as-contract (contract-call? .sbtc-token transfer tax-amount tx-sender (var-get destination-wallet) none)))
+    ;; burn USABTC
+    (try! (ft-burn? usabtc amount sender))
+    ;; TODO: review (as-contract) context here
+    ;; transfer sBTC tax to the custodian if > 0
+    (and (> exit-tax-amount u0)
+      (try! (as-contract (contract-call? .sbtc-token transfer exit-tax-amount USABTC_CONTRACT custodian none)))
+    )
+    ;; transfer sBTC to the sender
+    (try! (as-contract (contract-call? .sbtc-token transfer amount-after-tax USABTC_CONTRACT sender none)))
+    ;; print event
     (print {
       notification: "usabtc-withdrawal",
       payload: {
         amount: amount,
-        exit-amount: exit-amount,
-        sender: tx-sender,
-        tax-amount: tax-amount,
+        amount-after-tax: amount-after-tax,
+        custodian: custodian,
+        exit-tax-amount: exit-tax-amount,
+        sender: sender
       }
     })
     (ok true)
   )
 )
-
 
 ;; governance functions
 
@@ -194,9 +202,9 @@
   (begin
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
     (asserts! (not (is-eq (var-get custodian-trust-wallet) new-custodian-wallet)) ERR_UNAUTHORIZED)
-    (var-set destination-wallet new-custodian-wallet)
+    (var-set custodian-trust-wallet new-custodian-wallet)
     (print {
-      notification: "usabtc-update-custodian-wallet",
+      notification: "usabtc-custodian-wallet-updated",
       payload: {
         custodian-trust-wallet: new-custodian-wallet,
         previous-custodian-wallet: (var-get custodian-trust-wallet)
@@ -208,6 +216,41 @@
 
 ;; read only functions
 ;;
+
+;; exit tax functions
+
+(define-read-only (get-exit-tax-values)
+  {
+    active-exit-tax: (var-get active-exit-tax),
+    previous-exit-tax: (var-get previous-exit-tax),
+    active-exit-tax-activation-block: (var-get active-exit-tax-activation-block)
+  }
+)
+
+(define-read-only (get-current-exit-tax)
+  (if (>= burn-block-height (var-get active-exit-tax-activation-block))
+    ;; tax is active
+    (var-get active-exit-tax)
+    ;; tax is not active yet
+    (var-get previous-exit-tax)
+  )
+)
+
+(define-read-only (get-exit-tax-for-amount (amount uint))
+  ;; TODO: review precision
+  (if (>= burn-block-height (var-get active-exit-tax-activation-block))
+    ;; tax is active
+    (/ (* amount (var-get active-exit-tax)) u10000)
+    ;; tax is not active yet
+    (/ (* amount (var-get previous-exit-tax)) u10000)
+  )
+)
+
+;; custodian wallet functions
+
+(define-read-only (get-custodian-wallet)
+  (ok (var-get custodian-trust-wallet))
+)
 
 ;; SIP-010 read-only functions
 
