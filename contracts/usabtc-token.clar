@@ -42,18 +42,11 @@
 (define-constant EXIT_TAX_DELAY u21000) ;; approx 4.8 months in Bitcoin block time
 
 ;; error codes
-;; TODO: check all errors are unique
-;; TODO: check all errors are used
-(define-constant ERR_UNAUTHORIZED (err u1000))
-(define-constant ERR_NOT_TOKEN_OWNER (err u1001))
-(define-constant ERR_INSUFFICIENT_BALANCE (err u1002))
-(define-constant ERR_INVALID_AMOUNT (err u1003))
-(define-constant ERR_PROPOSAL_NOT_ACTIVE (err u1004))
-(define-constant ERR_PROPOSAL_STILL_ACTIVE (err u1005))
-(define-constant ERR_VOTED_ALREADY (err u1006))
-(define-constant ERR_NOTHING_STACKED (err u1007))
-(define-constant ERR_USER_NOT_FOUND (err u1008))
-(define-constant ERR_VOTE_FAILED (err u1009))
+(define-constant ERR_NOT_CUSTODIAN_WALLET (err u1000))
+(define-constant ERR_SAME_AS_CURRENT_CUSTODIAN (err u1001))
+(define-constant ERR_NOT_TOKEN_OWNER (err u1002))
+(define-constant ERR_INSUFFICIENT_BALANCE (err u1003))
+(define-constant ERR_INVALID_AMOUNT (err u1004))
 
 
 ;; data vars
@@ -163,7 +156,7 @@
 
 (define-public (enable-exit-tax)
   (begin
-    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
+    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
     (var-set previous-exit-tax (var-get active-exit-tax))
     (var-set active-exit-tax USABTC_EXIT_TAX)
     (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
@@ -181,7 +174,7 @@
 
 (define-public (disable-exit-tax)
   (begin
-    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
+    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
     (var-set previous-exit-tax (var-get active-exit-tax))
     (var-set active-exit-tax u0)
     ;; TODO: could make this no delay?
@@ -200,8 +193,8 @@
 
 (define-public (update-custodian-wallet (new-custodian-wallet principal))
   (begin
-    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_UNAUTHORIZED)
-    (asserts! (not (is-eq (var-get custodian-trust-wallet) new-custodian-wallet)) ERR_UNAUTHORIZED)
+    (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
+    (asserts! (not (is-eq (var-get custodian-trust-wallet) new-custodian-wallet)) ERR_SAME_AS_CURRENT_CUSTODIAN)
     (var-set custodian-trust-wallet new-custodian-wallet)
     (print {
       notification: "usabtc-custodian-wallet-updated",
