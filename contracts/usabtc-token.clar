@@ -251,7 +251,7 @@
 ;; custodian wallet functions
 
 (define-read-only (get-custodian-wallet)
-  (ok (var-get custodian-trust-wallet))
+  (var-get custodian-trust-wallet)
 )
 
 ;; SIP-010 read-only functions
