@@ -11,6 +11,62 @@ function mintSBTC(amount: number, recipient: string) {
   );
 }
 
+/*
+#### USABTC Test Plan
+
+UNIT TESTS
+
+SIP-010
+
+transfer()
+- fails if sender is not owner
+- succeeds, prints memo and event
+
+read only functions
+- get-name
+- get-symbol
+- get-decimals
+- get-balance
+- get-total-supply
+- get-token-uri
+
+USABTC
+
+deposit()
+- fails if amount is 0
+- succeeds, transfers sBTC to contract, mints USABTC
+withdraw()
+- fails if sender does not have enough USABTC
+- succeeds with exit tax = 0, burns USABTC, transfers sBTC to sender
+- succeeds with exit tax > 0, burns USABTC, transfers sBTC sender and custodian
+enable-exit-tax()
+- fails if called by contract deployer
+- fails if not called by custodian wallet
+- succeeds, set exit tax values, prints event
+disable-exit-tax()
+- fails if called by contract deployer
+- fails if not called by custodian wallet
+- succeeds, set exit tax values, prints event
+update-custodian-wallet()
+- fails if not called by custodian wallet
+- fails if new custodian wallet matches current
+- succeeds, set custodian wallet, print event
+
+read only functions
+- get-exit-tax-values
+- get-current-exit-tax
+- get-exit-tax-for-amount
+- get-custodian-wallet
+
+INTEGRATION TESTS
+
+- multiple deposits and withdrawals
+- before, during, after active tax block height
+- any other tricky scenarios to cover?
+
+ADD CODE COVERAGE TOO
+*/
+
 describe("USABTC Token - Transfer Function", () => {
   const USABTC_CONTRACT = "usabtc-token";
 
