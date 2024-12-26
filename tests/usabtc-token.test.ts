@@ -195,7 +195,7 @@ describe("USABTC Token - Transfer Function", () => {
     const accounts = simnet.getAccounts();
     const sender = accounts.get("deployer")!;
     const recipient = accounts.get("wallet_1")!;
-    const memo = Buffer.from("Test transfer with memo");
+    const memo = new TextEncoder().encode("Test transfer with memo");
 
     // mint sBTC for the sender
     mintSBTC(TRANSFER_AMOUNT * 100, sender); // 1 sBTC

@@ -95,7 +95,7 @@
     ;; make sure it's more than 0
     (asserts! (> amount u0) ERR_INVALID_AMOUNT)
     ;; transfer sBTC to this contract
-    (try! (contract-call? .sbtc-token transfer amount tx-sender USABTC_CONTRACT none))
+    (try! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer amount tx-sender USABTC_CONTRACT none))
     ;; mint USABTC to the despositor
     (try! (ft-mint? usabtc amount tx-sender))
     ;; print event
@@ -128,10 +128,10 @@
     ;; TODO: review (as-contract) context here
     ;; transfer sBTC tax to the custodian if > 0
     (and (> exit-tax-amount u0)
-      (try! (as-contract (contract-call? .sbtc-token transfer exit-tax-amount USABTC_CONTRACT custodian none)))
+      (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer exit-tax-amount USABTC_CONTRACT custodian none)))
     )
     ;; transfer sBTC to the sender
-    (try! (as-contract (contract-call? .sbtc-token transfer amount-after-tax USABTC_CONTRACT sender none)))
+    (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer amount-after-tax USABTC_CONTRACT sender none)))
     ;; print event
     (print {
       notification: "usabtc-withdrawal",
