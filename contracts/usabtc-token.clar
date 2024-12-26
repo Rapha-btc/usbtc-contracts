@@ -7,16 +7,16 @@
 ;; maintains a 1:1 relationship with sBTC.
 
 ;; KEY POINTS
-;; - USABTC is a network union that requests 0% capital gains tax in exchange from a 21% exit tax
-;;   from the USABTC Digital Economic Zone (DEZ).
-;; - USABTC is a specialized fungible token implemented on the Stacks blockchain.
+;; - USABTC is a network union that requests 0% capital gains tax in exchange from a 10% exit tax
+;;   from the USABTC Bitcoin Economic Zone (BEZ).
+;; - USABTC is a specialized fungible token implemented on the Stacks blockchain (Bitcoin L2).
 ;; - USABTC has a 1:1 relationship with sBTC, a tokenized version of Bitcoin on the Stacks network.
 ;; - sBTC is secured by the decentralized signers on the Stacks network, which is anchored to Bitcoin.
 ;; - Depositing sBTC into this contract locks it and mints an equivalent amount of USABTC.
 ;; - USABTC can be withdrawn back to sBTC at any time with an exit tax that starts at 0%.
 ;; - USABTC that is withdrawn is burned (destroyed) and the exit tax is sent to the custodian trust wallet.
-;; - The 21% exit tax can be enabled by the custodian trust wallet but with a delay of 4.8 months, with
-;;   the expectation that no federal capital gains tax will be applied to assets in the DEZ.
+;; - The 10% exit tax can be enabled by the custodian trust wallet but with a delay of 4.8 months, with
+;;   the expectation that no federal capital gains tax will be applied to assets in the BEZ.
 ;; - Funds CANNOT be directly transferred to this contract or the will be unrecoverable. Only sBTC
 ;;   transferred through the "deposit" function will be minted into USABTC.
 ;; - USABTC https://usabtc.org | Stacks https://stacks.co
@@ -32,12 +32,15 @@
 ;; constants
 ;;
 
-(define-constant CONTRACT_OWNER tx-sender)
+(define-constant USABTC_CONTRACT_DEPLOYER tx-sender)
 (define-constant USABTC_CONTRACT (as-contract tx-sender))
 
 ;; exit tax
-(define-constant USABTC_EXIT_TAX u2100) ;; 21% exit tax
+(define-constant USABTC_EXIT_TAX u10) ;; 10% exit tax
 (define-constant EXIT_TAX_DELAY u21000) ;; approx 4.8 months in Bitcoin block time
+
+;; math helpers
+(define-constant ONE_8 (pow u10 u8))
 
 ;; error codes
 (define-constant ERR_NOT_CUSTODIAN_WALLET (err u1000))
@@ -49,16 +52,15 @@
 
 ;; data vars
 ;;
-;; TODO: decide home for metadata. ordinal? IPFS? URL?
 (define-data-var token-uri (optional (string-utf8 256)) (some u"https://usabtc.org/token-metadata.json"))
 ;; holds the active exit tax used in calculations
-;; exit task starts at 0% until activated, always 21% or 0%
+;; exit task starts at 0% until activated, always 10% or 0%
 (define-data-var previous-exit-tax uint u0)
 (define-data-var active-exit-tax uint u0)
 (define-data-var active-exit-tax-activation-block uint u0)
 ;; destination wallet for exit tax funds and responsibilities
 ;; temporarily set to deployer and blocked from enabling exit tax
-(define-data-var custodian-trust-wallet principal CONTRACT_OWNER)
+(define-data-var custodian-trust-wallet principal USABTC_CONTRACT_DEPLOYER)
 
 ;; public functions
 ;;
@@ -106,7 +108,7 @@
         sender: tx-sender
       }
     })
-    (ok true)
+    (ok amount)
   )
 )
 
@@ -125,7 +127,6 @@
     (asserts! (>= sender-balance amount) ERR_INSUFFICIENT_BALANCE)
     ;; burn USABTC
     (try! (ft-burn? usabtc amount sender))
-    ;; TODO: review (as-contract) context here
     ;; transfer sBTC tax to the custodian if > 0
     (and (> exit-tax-amount u0)
       (try! (as-contract (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer exit-tax-amount USABTC_CONTRACT custodian none)))
@@ -143,7 +144,7 @@
         sender: sender
       }
     })
-    (ok true)
+    (ok amount)
   )
 )
 
@@ -152,7 +153,7 @@
 (define-public (enable-exit-tax)
   (begin
     ;; verify sender is not deployer
-    (asserts! (not (is-eq tx-sender CONTRACT_OWNER)) ERR_NOT_CUSTODIAN_WALLET)
+    (asserts! (not (is-eq tx-sender USABTC_CONTRACT_DEPLOYER)) ERR_NOT_CUSTODIAN_WALLET)
     ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
     ;; set exit tax values
@@ -175,13 +176,12 @@
 (define-public (disable-exit-tax)
   (begin
     ;; verify sender is not deployer
-    (asserts! (not (is-eq tx-sender CONTRACT_OWNER)) ERR_NOT_CUSTODIAN_WALLET)
+    (asserts! (not (is-eq tx-sender USABTC_CONTRACT_DEPLOYER)) ERR_NOT_CUSTODIAN_WALLET)
     ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
     ;; set exit tax values
     (var-set previous-exit-tax (var-get active-exit-tax))
     (var-set active-exit-tax u0)
-    ;; TODO: could make this no delay?
     (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
     ;; print event
     (print {
@@ -239,12 +239,11 @@
 )
 
 (define-read-only (get-exit-tax-for-amount (amount uint))
-  ;; TODO: review using better precision
   (if (>= burn-block-height (var-get active-exit-tax-activation-block))
     ;; tax is active
-    (/ (* amount (var-get active-exit-tax)) u10000)
+    (/ (* amount (var-get active-exit-tax)) ONE_8)
     ;; tax is not active yet
-    (/ (* amount (var-get previous-exit-tax)) u10000)
+    (/ (* amount (var-get previous-exit-tax)) ONE_8)
   )
 )
 
