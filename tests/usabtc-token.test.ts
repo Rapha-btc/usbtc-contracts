@@ -1,4 +1,4 @@
-import { Cl, cvToValue, TupleCV, UIntCV } from "@stacks/transactions";
+import { Cl, cvToValue, TupleCV } from "@stacks/transactions";
 import { describe, expect, it } from "vitest";
 
 // matches error codes in contract
@@ -260,7 +260,6 @@ describe("SIP-010 Functions", () => {
   });
   it("get-total-supply(): returns the total supply of the token", () => {
     // ARRANGE
-
     // ACT
     const response = simnet.callReadOnlyFn(
       usabtcTokenContract,
