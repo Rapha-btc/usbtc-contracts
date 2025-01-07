@@ -1,4 +1,4 @@
-import { Cl, cvToValue } from "@stacks/transactions";
+import { Cl, cvToValue, TupleCV, UIntCV } from "@stacks/transactions";
 import { describe, expect, it } from "vitest";
 
 // matches error codes in contract
@@ -18,6 +18,26 @@ function mintSBTC(amount: number, recipient: string) {
     [Cl.uint(amount), Cl.principal(recipient)],
     simnet.getAccounts().get("deployer")!
   );
+}
+
+type ExitTaxValues = {
+  activeExitTax: number;
+  activeExitTaxActivationBlock: number;
+  previousExitTax: number;
+};
+
+// generalized function to extract exit tax values as a typed object
+function extractExitTaxValues(exitTaxValuesCV: TupleCV): ExitTaxValues {
+  const exitTaxValues = cvToValue(exitTaxValuesCV);
+  const activeExitTax = exitTaxValues["active-exit-tax"].value;
+  const activeExitTaxActivationBlock =
+    exitTaxValues["active-exit-tax-activation-block"].value;
+  const previousExitTax = exitTaxValues["previous-exit-tax"].value;
+  return {
+    activeExitTax,
+    activeExitTaxActivationBlock,
+    previousExitTax,
+  };
 }
 
 const accounts = simnet.getAccounts();
@@ -227,24 +247,246 @@ describe("SIP-010 Functions", () => {
 });
 
 describe("USABTC Functions", () => {
-  it("deposit(): fails if amount is 0", () => {});
-  it("deposit(): succeeds, transfers sBTC to contract, mints USABTC", () => {});
-  it("withdraw(): fails if sender does not have enough USABTC", () => {});
-  it("withdraw(): succeeds with exit tax = 0, burns USABTC, transfers sBTC to sender", () => {});
-  it("withdraw(): succeeds with exit tax > 0, burns USABTC, transfers sBTC sender and custodian", () => {});
-  it("enable-exit-tax(): fails if called by contract deployer", () => {});
-  it("enable-exit-tax(): fails if not called by custodian wallet", () => {});
-  it("enable-exit-tax(): succeeds, set exit tax values, prints event", () => {});
-  it("disable-exit-tax(): fails if called by contract deployer", () => {});
-  it("disable-exit-tax(): fails if not called by custodian wallet", () => {});
-  it("disable-exit-tax(): succeeds, set exit tax values, prints event", () => {});
-  it("update-custodian-wallet(): fails if not called by custodian wallet", () => {});
-  it("update-custodian-wallet(): fails if new custodian wallet matches current", () => {});
-  it("update-custodian-wallet(): succeeds, set custodian wallet, print event", () => {});
-  it("get-exit-tax-values(): returns the exit tax values", () => {});
-  it("get-current-exit-tax(): returns the current exit tax", () => {});
-  it("get-exit-tax-for-amount(): returns the exit tax for an amount", () => {});
-  it("get-custodian-wallet(): returns the custodian wallet", () => {});
+  it("deposit(): fails if amount is 0", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(0)],
+      sender
+    );
+    // ASSERT
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_INVALID_AMOUNT));
+  });
+  it("deposit(): succeeds, transfers sBTC to contract, mints USABTC", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    // mint sBTC for the sender
+    mintSBTC(depositAmount, sender); // 0.02 sBTC
+    // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    // ASSERT
+    expect(response.result).toBeOk(Cl.uint(depositAmount));
+  });
+  it("withdraw(): fails if sender does not have enough USABTC", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "withdraw",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    // ASSERT
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_INSUFFICIENT_BALANCE));
+  });
+  it("withdraw(): succeeds with exit tax = 0, burns USABTC, transfers sBTC to sender", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    // mint sBTC for the sender
+    mintSBTC(depositAmount, sender); // 0.02 sBTC
+    // capture USABTC total supply before deposit
+    const totalSupplyBefore = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-total-supply",
+      [],
+      sender
+    );
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(depositAmount));
+    // ACT
+    // capture USABTC exit tax before withdrawal
+    const exitTaxValues = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-values",
+      [],
+      sender
+    );
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "withdraw",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    const totalSupplyAfter = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-total-supply",
+      [],
+      sender
+    );
+    // ASSERT
+    expect(exitTaxValues.result).toBeTuple({
+      "active-exit-tax": Cl.uint(0),
+      "active-exit-tax-activation-block": Cl.uint(0),
+      "previous-exit-tax": Cl.uint(0),
+    });
+    expect(response.result).toBeOk(Cl.uint(depositAmount));
+    expect(totalSupplyBefore).toEqual(totalSupplyAfter);
+  });
+  it("withdraw(): succeeds with exit tax = 10%, burns USABTC, transfers sBTC sender and custodian", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+    // mint sBTC for the sender
+    mintSBTC(depositAmount, sender); // 0.02 sBTC
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(depositAmount));
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+    // capture exit tax values before enabling
+    const exitTaxValuesBefore = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-values",
+      [],
+      sender
+    );
+    const exitTaxValuesBeforeObj = extractExitTaxValues(
+      exitTaxValuesBefore.result as TupleCV
+    );
+    console.log("exitTaxValuesBeforeObj: ", exitTaxValuesBeforeObj);
+    // enable exit tax
+    const enableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      custodian
+    );
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+    // capture exit tax values after enabling
+    const exitTaxValuesAfter = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-values",
+      [],
+      sender
+    );
+    const exitTaxValuesAfterObj = extractExitTaxValues(
+      exitTaxValuesAfter.result as TupleCV
+    );
+    console.log("exitTaxValuesAfterObj: ", exitTaxValuesAfterObj);
+    const fastForward = simnet.mineEmptyBurnBlocks(
+      exitTaxValuesAfterObj.activeExitTaxActivationBlock
+    );
+    console.log("fastForward: ", fastForward);
+    // capture exit tax values after activation block
+    const exitTaxValuesAfterActivation = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-values",
+      [],
+      sender
+    );
+    const exitTaxValuesAfterActivationObj = extractExitTaxValues(
+      exitTaxValuesAfterActivation.result as TupleCV
+    );
+    console.log(
+      "exitTaxValuesAfterActivationObj: ",
+      exitTaxValuesAfterActivationObj
+    );
+    // ACT
+    console.log(simnet.blockHeight, simnet.burnBlockHeight);
+
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "withdraw",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    // ASSERT
+    console.log(simnet.blockHeight, simnet.burnBlockHeight);
+
+    console.log(`response: ${JSON.stringify(response)}`);
+    expect(response.result).toBeOk(Cl.uint(depositAmount));
+  });
+  it("enable-exit-tax(): fails if called by contract deployer", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("enable-exit-tax(): fails if not called by custodian wallet", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("enable-exit-tax(): succeeds, set exit tax values, prints event", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("disable-exit-tax(): fails if called by contract deployer", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("disable-exit-tax(): fails if not called by custodian wallet", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("disable-exit-tax(): succeeds, set exit tax values, prints event", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("update-custodian-wallet(): fails if not called by custodian wallet", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("update-custodian-wallet(): fails if new custodian wallet matches current", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("update-custodian-wallet(): succeeds, set custodian wallet, print event", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("get-exit-tax-values(): returns the exit tax values", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("get-current-exit-tax(): returns the current exit tax", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("get-exit-tax-for-amount(): returns the exit tax for an amount", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
+  it("get-custodian-wallet(): returns the custodian wallet", () => {
+    // ARRANGE
+    // ACT
+    // ASSERT
+  });
 });
 
 /*

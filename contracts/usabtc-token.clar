@@ -147,7 +147,7 @@
         sender: sender
       }
     })
-    (ok amount)
+    (ok amount-after-tax)
   )
 )
 
