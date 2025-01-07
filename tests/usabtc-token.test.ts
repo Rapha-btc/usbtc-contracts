@@ -226,42 +226,31 @@ describe("SIP-010 Functions", () => {
   });
 });
 
+describe("USABTC Functions", () => {
+  it("deposit(): fails if amount is 0", () => {});
+  it("deposit(): succeeds, transfers sBTC to contract, mints USABTC", () => {});
+  it("withdraw(): fails if sender does not have enough USABTC", () => {});
+  it("withdraw(): succeeds with exit tax = 0, burns USABTC, transfers sBTC to sender", () => {});
+  it("withdraw(): succeeds with exit tax > 0, burns USABTC, transfers sBTC sender and custodian", () => {});
+  it("enable-exit-tax(): fails if called by contract deployer", () => {});
+  it("enable-exit-tax(): fails if not called by custodian wallet", () => {});
+  it("enable-exit-tax(): succeeds, set exit tax values, prints event", () => {});
+  it("disable-exit-tax(): fails if called by contract deployer", () => {});
+  it("disable-exit-tax(): fails if not called by custodian wallet", () => {});
+  it("disable-exit-tax(): succeeds, set exit tax values, prints event", () => {});
+  it("update-custodian-wallet(): fails if not called by custodian wallet", () => {});
+  it("update-custodian-wallet(): fails if new custodian wallet matches current", () => {});
+  it("update-custodian-wallet(): succeeds, set custodian wallet, print event", () => {});
+  it("get-exit-tax-values(): returns the exit tax values", () => {});
+  it("get-current-exit-tax(): returns the current exit tax", () => {});
+  it("get-exit-tax-for-amount(): returns the exit tax for an amount", () => {});
+  it("get-custodian-wallet(): returns the custodian wallet", () => {});
+});
+
 /*
-#### USABTC Test Plan
-
-USABTC
-
-deposit()
-- fails if amount is 0
-- succeeds, transfers sBTC to contract, mints USABTC
-withdraw()
-- fails if sender does not have enough USABTC
-- succeeds with exit tax = 0, burns USABTC, transfers sBTC to sender
-- succeeds with exit tax > 0, burns USABTC, transfers sBTC sender and custodian
-enable-exit-tax()
-- fails if called by contract deployer
-- fails if not called by custodian wallet
-- succeeds, set exit tax values, prints event
-disable-exit-tax()
-- fails if called by contract deployer
-- fails if not called by custodian wallet
-- succeeds, set exit tax values, prints event
-update-custodian-wallet()
-- fails if not called by custodian wallet
-- fails if new custodian wallet matches current
-- succeeds, set custodian wallet, print event
-
-read only functions
-- get-exit-tax-values
-- get-current-exit-tax
-- get-exit-tax-for-amount
-- get-custodian-wallet
-
-INTEGRATION TESTS
-
-- multiple deposits and withdrawals
-- before, during, after active tax block height
-- any other tricky scenarios to cover?
-
-ADD CODE COVERAGE TOO
+describe("USABTC Integration Tests", () => {
+  it("multiple deposits and withdrawals", () => {});
+  it("before, during, after active tax block height", () => {});
+  it("any other tricky scenarios to cover?", () => {});
+});
 */
