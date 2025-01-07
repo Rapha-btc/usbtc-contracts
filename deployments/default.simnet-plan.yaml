@@ -173,6 +173,9 @@ plan:
       transactions: []
       epoch: "2.1"
     - id: 40
+      transactions: []
+      epoch: "2.1"
+    - id: 41
       transactions:
         - emulated-contract-publish:
             contract-name: sbtc-registry
@@ -199,9 +202,6 @@ plan:
             emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
             path: contracts/usabtc-token.clar
             clarity-version: 2
-      epoch: "3.0"
-    - id: 41
-      transactions: []
       epoch: "3.0"
     - id: 42
       transactions: []
@@ -312,5 +312,11 @@ plan:
       transactions: []
       epoch: "3.0"
     - id: 78
+      transactions: []
+      epoch: "3.0"
+    - id: 79
+      transactions: []
+      epoch: "3.0"
+    - id: 80
       transactions: []
       epoch: "3.0"
