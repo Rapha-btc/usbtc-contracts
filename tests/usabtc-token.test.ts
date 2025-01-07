@@ -144,9 +144,36 @@ describe("SIP-010 Functions", () => {
     expect(response.result).toBeOk(Cl.uint(8));
   });
   it("get-balance(): returns the balance of an account", () => {
-    // ARRANGE
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-balance",
+      [Cl.principal(accounts.get("deployer")!)],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toBeOk(Cl.uint(0));
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    // mint sBTC for the account
+    mintSBTC(transferAmount * 100, sender); // 1 sBTC
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(depositAmount));
+    // ACT
+    const response2 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-balance",
+      [Cl.principal(sender)],
+      sender
+    );
+    // ASSERT
+    expect(response2.result).toBeOk(Cl.uint(depositAmount));
   });
   it("get-total-supply(): returns the total supply of the token", () => {
     // ARRANGE
@@ -160,6 +187,28 @@ describe("SIP-010 Functions", () => {
     );
     // ASSERT
     expect(response.result).toBeOk(Cl.uint(0));
+
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    // mint sBTC for the sender
+    mintSBTC(transferAmount * 100, sender); // 1 sBTC
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(depositAmount));
+    // ACT
+    const response2 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-total-supply",
+      [],
+      accounts.get("deployer")!
+    );
+    // ASSERT
+    expect(response2.result).toBeOk(Cl.uint(depositAmount));
   });
   it("get-token-uri(): returns the token URI", () => {
     // ARRANGE
