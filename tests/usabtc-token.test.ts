@@ -63,6 +63,11 @@ const depositAmount = transferAmount * 2; // 0.02 USABTC
 const exitTaxDelay = 21000;
 const usabtcTokenContract = "usabtc-token";
 
+// a random value between 1 and depositAmount
+function getRandomDepositAmount() {
+  return Math.round(Math.random() * depositAmount);
+}
+
 describe("SIP-010 Functions", () => {
   it("transfer(): fails if sender is not owner", () => {
     // ARRANGE
@@ -644,103 +649,270 @@ describe("USABTC Functions", () => {
   });
 });
 
-/*
 describe("USABTC Integration Tests", () => {
-  it("multiple deposits and withdrawals", () => {});
-  it("before, during, after active tax block height", () => {});
-  it("any other tricky scenarios to cover?", () => {});
-});
-*/
-
-/* FROM withdraw exit tax = 0
-// capture USABTC total supply before deposit
-    const totalSupplyBefore = simnet.callReadOnlyFn(
-      usabtcTokenContract,
-      "get-total-supply",
-      [],
-      sender
+  it("accurately tracks multiple deposits and withdrawals", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const wallets = [
+      accounts.get("wallet_1")!,
+      accounts.get("wallet_2")!,
+      accounts.get("wallet_3")!,
+      accounts.get("wallet_4")!,
+      accounts.get("wallet_5")!,
+      accounts.get("wallet_6")!,
+      accounts.get("wallet_7")!,
+    ];
+    // fill array to length of wallets with random deposit amounts
+    const depositAmounts = Array.from(
+      { length: wallets.length },
+      getRandomDepositAmount
     );
-    // capture USABTC exit tax before withdrawal
-    const exitTaxValues = simnet.callReadOnlyFn(
-      usabtcTokenContract,
-      "get-exit-tax-values",
-      [],
-      sender
-    );
-const totalSupplyAfter = simnet.callReadOnlyFn(
-      usabtcTokenContract,
-      "get-total-supply",
-      [],
-      sender
-    );
-
-expect(exitTaxValues.result).toBeTuple({
-      "active-exit-tax": Cl.uint(0),
-      "active-exit-tax-activation-block": Cl.uint(0),
-      "previous-exit-tax": Cl.uint(0),
+    // mint sBTC to all wallets
+    wallets.forEach((wallet, idx) => {
+      mintSBTC(depositAmounts[idx], wallet);
     });
-
-    expect(totalSupplyBefore).toEqual(totalSupplyAfter);
-*/
-
-/* FROM withdraw exit tax = 10%
-// capture exit tax values before enabling
-    const exitTaxValuesBefore = simnet.callReadOnlyFn(
+    // ACT
+    // deposit sBTC to mint USABTC for all wallets
+    wallets.forEach((wallet, idx) => {
+      const depositResponse = simnet.callPublicFn(
+        usabtcTokenContract,
+        "deposit",
+        [Cl.uint(depositAmounts[idx])],
+        wallet
+      );
+      expect(depositResponse.result).toBeOk(Cl.uint(depositAmounts[idx]));
+    });
+    // withdraw USABTC for all wallets
+    wallets.forEach((wallet, idx) => {
+      const response = simnet.callPublicFn(
+        usabtcTokenContract,
+        "withdraw",
+        [Cl.uint(depositAmounts[idx])],
+        wallet
+      );
+      expect(response.result).toBeOk(Cl.uint(depositAmounts[idx]));
+    });
+    // ASSERT
+  });
+  it("accurately tracks before, during, after active tax block height", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_8")!;
+    const wallets = [
+      accounts.get("wallet_1")!,
+      accounts.get("wallet_2")!,
+      accounts.get("wallet_3")!,
+    ];
+    // fill array to length of wallets with random deposit amounts
+    const depositAmounts = Array.from(
+      { length: wallets.length },
+      getRandomDepositAmount
+    );
+    // mint sBTC to all wallets
+    wallets.forEach((wallet, idx) => {
+      mintSBTC(depositAmounts[idx], wallet);
+    });
+    // deposit sBTC to mint USABTC for all wallets
+    wallets.forEach((wallet, idx) => {
+      const depositResponse = simnet.callPublicFn(
+        usabtcTokenContract,
+        "deposit",
+        [Cl.uint(depositAmounts[idx])],
+        wallet
+      );
+      expect(depositResponse.result).toBeOk(Cl.uint(depositAmounts[idx]));
+    });
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+    // 1. exit tax is not enabled
+    // ACT
+    const exitTaxValues1 = simnet.callReadOnlyFn(
       usabtcTokenContract,
       "get-exit-tax-values",
       [],
       sender
     );
-    // check expected exit tax values
-    checkExitTaxValues(exitTaxValuesBefore.result as TupleCV, 0, 0, 0);
-    // capture exit tax for amount before enabled
-    const exitTaxValueForAmountBeforeCV = simnet.callReadOnlyFn(
+    const currentExitTax1 = simnet.callReadOnlyFn(
       usabtcTokenContract,
-      "get-exit-tax-for-amount",
-      [Cl.uint(depositAmount)],
+      "get-current-exit-tax",
+      [],
       sender
     );
-    expect(exitTaxValueForAmountBeforeCV.result).toStrictEqual(Cl.uint(0));
+    wallets.forEach((_, idx) => {
+      const exitTaxValueForAmount1 = simnet.callReadOnlyFn(
+        usabtcTokenContract,
+        "get-exit-tax-for-amount",
+        [Cl.uint(depositAmounts[idx])],
+        sender
+      );
+      // ASSERT
+      expect(exitTaxValueForAmount1.result).toStrictEqual(Cl.uint(0));
+    });
+    // ASSERT
+    checkExitTaxValues(exitTaxValues1.result as TupleCV, 0, 0, 0);
+    expect(currentExitTax1.result).toStrictEqual(Cl.uint(0));
+    // 2. exit tax is enabled but not active
+    // ARRANGE
 
-// check expected exit tax values
-    checkExitTaxValues(
-      exitTaxValuesAfter.result as TupleCV,
-      10,
-      activationBlockHeight,
-      0
-    );
-    // capture exit tax for amount after enabled
-    const exitTaxValueForAmountAfterCV = simnet.callReadOnlyFn(
+    const enableExitTaxResponse = simnet.callPublicFn(
       usabtcTokenContract,
-      "get-exit-tax-for-amount",
-      [Cl.uint(depositAmount)],
-      sender
+      "enable-exit-tax",
+      [],
+      custodian
     );
-    expect(exitTaxValueForAmountAfterCV.result).toStrictEqual(Cl.uint(0));
-
-// capture exit tax values after activation block
-    const exitTaxValuesAfterActivation = simnet.callReadOnlyFn(
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+    const activationBlockHeight = simnet.burnBlockHeight + exitTaxDelay;
+    // ACT
+    const exitTaxValues2 = simnet.callReadOnlyFn(
       usabtcTokenContract,
       "get-exit-tax-values",
       [],
       sender
     );
-    // check expected exit tax values
+    const currentExitTax2 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-current-exit-tax",
+      [],
+      sender
+    );
+    wallets.forEach((_, idx) => {
+      const exitTaxValueForAmount2 = simnet.callReadOnlyFn(
+        usabtcTokenContract,
+        "get-exit-tax-for-amount",
+        [Cl.uint(depositAmounts[idx])],
+        sender
+      );
+      // ASSERT
+      expect(exitTaxValueForAmount2.result).toStrictEqual(Cl.uint(0));
+    });
+    // ASSERT
     checkExitTaxValues(
-      exitTaxValuesAfterActivation.result as TupleCV,
+      exitTaxValues2.result as TupleCV,
       10,
       activationBlockHeight,
       0
     );
-    // capture exit tax for amount after enabled
-    const exitTaxValueForAmountAfterActivationCV = simnet.callReadOnlyFn(
+    expect(currentExitTax2.result).toStrictEqual(Cl.uint(0));
+    // 3. exit tax is enabled and active
+    // ARRANGE
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+    // ACT
+    const exitTaxValues3 = simnet.callReadOnlyFn(
       usabtcTokenContract,
-      "get-exit-tax-for-amount",
-      [Cl.uint(depositAmount)],
+      "get-exit-tax-values",
+      [],
       sender
     );
-    expect(exitTaxValueForAmountAfterActivationCV.result).toStrictEqual(
-      Cl.uint(taxAmount)
+    const currentExitTax3 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-current-exit-tax",
+      [],
+      sender
     );
-
-*/
+    wallets.forEach((_, idx) => {
+      const exitTaxValueForAmount3 = simnet.callReadOnlyFn(
+        usabtcTokenContract,
+        "get-exit-tax-for-amount",
+        [Cl.uint(depositAmounts[idx])],
+        sender
+      );
+      // ASSERT
+      expect(exitTaxValueForAmount3.result).toStrictEqual(
+        Cl.uint(Math.floor((depositAmounts[idx] * 10) / 100))
+      );
+    });
+    // ASSERT
+    checkExitTaxValues(
+      exitTaxValues3.result as TupleCV,
+      10,
+      activationBlockHeight,
+      0
+    );
+    expect(currentExitTax3.result).toStrictEqual(Cl.uint(10));
+    // 4. exit tax is disabled but not active
+    // ARRANGE
+    const disableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "disable-exit-tax",
+      [],
+      custodian
+    );
+    expect(disableExitTaxResponse.result).toBeOk(Cl.bool(true));
+    const disabledBlockHeight = simnet.burnBlockHeight + exitTaxDelay;
+    // ACT
+    const exitTaxValues4 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-values",
+      [],
+      sender
+    );
+    const currentExitTax4 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-current-exit-tax",
+      [],
+      sender
+    );
+    wallets.forEach((_, idx) => {
+      const exitTaxValueForAmount4 = simnet.callReadOnlyFn(
+        usabtcTokenContract,
+        "get-exit-tax-for-amount",
+        [Cl.uint(depositAmounts[idx])],
+        sender
+      );
+      // ASSERT
+      expect(exitTaxValueForAmount4.result).toStrictEqual(
+        Cl.uint(Math.floor((depositAmounts[idx] * 10) / 100))
+      );
+    });
+    // ASSERT
+    checkExitTaxValues(
+      exitTaxValues4.result as TupleCV,
+      0,
+      disabledBlockHeight,
+      10
+    );
+    expect(currentExitTax4.result).toStrictEqual(Cl.uint(10));
+    // 5. exit tax is disabled and active
+    // ARRANGE
+    // skip to when exit tax is disabled
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+    // ACT
+    const exitTaxValues5 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-values",
+      [],
+      sender
+    );
+    const currentExitTax5 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-current-exit-tax",
+      [],
+      sender
+    );
+    wallets.forEach((_, idx) => {
+      const exitTaxValueForAmount5 = simnet.callReadOnlyFn(
+        usabtcTokenContract,
+        "get-exit-tax-for-amount",
+        [Cl.uint(depositAmounts[idx])],
+        sender
+      );
+      // ASSERT
+      expect(exitTaxValueForAmount5.result).toStrictEqual(Cl.uint(0));
+    });
+    // ASSERT
+    checkExitTaxValues(
+      exitTaxValues5.result as TupleCV,
+      0,
+      disabledBlockHeight,
+      10
+    );
+    expect(currentExitTax5.result).toStrictEqual(Cl.uint(0));
+  });
+});
