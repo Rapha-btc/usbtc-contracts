@@ -29,10 +29,11 @@ type ExitTaxValues = {
 // generalized function to extract exit tax values as a typed object
 function extractExitTaxValues(exitTaxValuesCV: TupleCV): ExitTaxValues {
   const exitTaxValues = cvToValue(exitTaxValuesCV);
-  const activeExitTax = exitTaxValues["active-exit-tax"].value;
-  const activeExitTaxActivationBlock =
-    exitTaxValues["active-exit-tax-activation-block"].value;
-  const previousExitTax = exitTaxValues["previous-exit-tax"].value;
+  const activeExitTax = parseInt(exitTaxValues["active-exit-tax"].value);
+  const activeExitTaxActivationBlock = parseInt(
+    exitTaxValues["active-exit-tax-activation-block"].value
+  );
+  const previousExitTax = parseInt(exitTaxValues["previous-exit-tax"].value);
   return {
     activeExitTax,
     activeExitTaxActivationBlock,
@@ -40,9 +41,26 @@ function extractExitTaxValues(exitTaxValuesCV: TupleCV): ExitTaxValues {
   };
 }
 
+function checkExitTaxValues(
+  exitTaxValuesCV: TupleCV,
+  expectedActiveExitTax: number,
+  expectedActiveExitTaxActivationBlock: number,
+  expectedPreviousExitTax: number
+) {
+  const expectedTaxValues = Cl.tuple({
+    "active-exit-tax": Cl.uint(expectedActiveExitTax),
+    "active-exit-tax-activation-block": Cl.uint(
+      expectedActiveExitTaxActivationBlock
+    ),
+    "previous-exit-tax": Cl.uint(expectedPreviousExitTax),
+  });
+  expect(exitTaxValuesCV).toStrictEqual(expectedTaxValues);
+}
+
 const accounts = simnet.getAccounts();
 const transferAmount = 1000000; // 0.01 USABTC (8 decimals)
 const depositAmount = transferAmount * 2; // 0.02 USABTC
+const exitTaxDelay = 21000;
 const usabtcTokenContract = "usabtc-token";
 
 describe("SIP-010 Functions", () => {
@@ -341,6 +359,7 @@ describe("USABTC Functions", () => {
     // ARRANGE
     const sender = accounts.get("deployer")!;
     const custodian = accounts.get("wallet_1")!;
+    const taxAmount = (depositAmount * 10) / 100;
     // mint sBTC for the sender
     mintSBTC(depositAmount, sender); // 0.02 sBTC
     // deposit sBTC to mint USABTC
@@ -366,10 +385,16 @@ describe("USABTC Functions", () => {
       [],
       sender
     );
-    const exitTaxValuesBeforeObj = extractExitTaxValues(
-      exitTaxValuesBefore.result as TupleCV
+    // check expected exit tax values
+    checkExitTaxValues(exitTaxValuesBefore.result as TupleCV, 0, 0, 0);
+    // capture exit tax for amount before enabled
+    const exitTaxValueForAmountBeforeCV = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(depositAmount)],
+      sender
     );
-    console.log("exitTaxValuesBeforeObj: ", exitTaxValuesBeforeObj);
+    expect(exitTaxValueForAmountBeforeCV.result).toStrictEqual(Cl.uint(0));
     // enable exit tax
     const enableExitTaxResponse = simnet.callPublicFn(
       usabtcTokenContract,
@@ -378,6 +403,7 @@ describe("USABTC Functions", () => {
       custodian
     );
     expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+    const activationBlockHeight = simnet.burnBlockHeight + exitTaxDelay;
     // capture exit tax values after enabling
     const exitTaxValuesAfter = simnet.callReadOnlyFn(
       usabtcTokenContract,
@@ -388,11 +414,27 @@ describe("USABTC Functions", () => {
     const exitTaxValuesAfterObj = extractExitTaxValues(
       exitTaxValuesAfter.result as TupleCV
     );
-    console.log("exitTaxValuesAfterObj: ", exitTaxValuesAfterObj);
-    const fastForward = simnet.mineEmptyBurnBlocks(
-      exitTaxValuesAfterObj.activeExitTaxActivationBlock
+    // verify activation block height is correct
+    expect(exitTaxValuesAfterObj.activeExitTaxActivationBlock).toBe(
+      activationBlockHeight
     );
-    console.log("fastForward: ", fastForward);
+    // check expected exit tax values
+    checkExitTaxValues(
+      exitTaxValuesAfter.result as TupleCV,
+      10,
+      activationBlockHeight,
+      0
+    );
+    // capture exit tax for amount after enabled
+    const exitTaxValueForAmountAfterCV = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    expect(exitTaxValueForAmountAfterCV.result).toStrictEqual(Cl.uint(0));
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
     // capture exit tax values after activation block
     const exitTaxValuesAfterActivation = simnet.callReadOnlyFn(
       usabtcTokenContract,
@@ -400,16 +442,24 @@ describe("USABTC Functions", () => {
       [],
       sender
     );
-    const exitTaxValuesAfterActivationObj = extractExitTaxValues(
-      exitTaxValuesAfterActivation.result as TupleCV
+    // check expected exit tax values
+    checkExitTaxValues(
+      exitTaxValuesAfterActivation.result as TupleCV,
+      10,
+      activationBlockHeight,
+      0
     );
-    console.log(
-      "exitTaxValuesAfterActivationObj: ",
-      exitTaxValuesAfterActivationObj
+    // capture exit tax for amount after enabled
+    const exitTaxValueForAmountAfterActivationCV = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    expect(exitTaxValueForAmountAfterActivationCV.result).toStrictEqual(
+      Cl.uint(taxAmount)
     );
     // ACT
-    console.log(simnet.blockHeight, simnet.burnBlockHeight);
-
     const response = simnet.callPublicFn(
       usabtcTokenContract,
       "withdraw",
@@ -417,10 +467,7 @@ describe("USABTC Functions", () => {
       sender
     );
     // ASSERT
-    console.log(simnet.blockHeight, simnet.burnBlockHeight);
-
-    console.log(`response: ${JSON.stringify(response)}`);
-    expect(response.result).toBeOk(Cl.uint(depositAmount));
+    expect(response.result).toBeOk(Cl.uint(depositAmount - taxAmount));
   });
   it("enable-exit-tax(): fails if called by contract deployer", () => {
     // ARRANGE

@@ -39,9 +39,6 @@
 (define-constant USABTC_EXIT_TAX u10) ;; 10% exit tax
 (define-constant EXIT_TAX_DELAY u21000) ;; approx 4.8 months in Bitcoin block time
 
-;; math helpers
-(define-constant ONE_8 (pow u10 u8))
-
 ;; error codes
 (define-constant ERR_NOT_CUSTODIAN_WALLET (err u1000))
 (define-constant ERR_SAME_AS_CURRENT_CUSTODIAN (err u1001))
@@ -244,9 +241,9 @@
 (define-read-only (get-exit-tax-for-amount (amount uint))
   (if (>= burn-block-height (var-get active-exit-tax-activation-block))
     ;; tax is active
-    (/ (* amount (var-get active-exit-tax)) ONE_8)
+    (/ (* amount (var-get active-exit-tax)) u100)
     ;; tax is not active yet
-    (/ (* amount (var-get previous-exit-tax)) ONE_8)
+    (/ (* amount (var-get previous-exit-tax)) u100)
   )
 )
 
