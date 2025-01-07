@@ -94,7 +94,52 @@ describe("SIP-010 Functions", () => {
     // ASSERT
     expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_NOT_TOKEN_OWNER));
   });
-  it("transfer(): succeeds, prints memo and event", () => {
+  it("transfer(): succeeds with no memo", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const recipient = accounts.get("wallet_1")!;
+    // mint sBTC for the sender
+    mintSBTC(transferAmount * 100, sender); // 1 sBTC
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(depositAmount)],
+      sender
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(depositAmount));
+    // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "transfer",
+      [
+        Cl.uint(transferAmount),
+        Cl.principal(sender),
+        Cl.principal(recipient),
+        Cl.none(),
+      ],
+      sender
+    );
+    // ASSERT
+    // check that the transfer succeeded
+    expect(response.result).toBeOk(Cl.bool(true));
+    // check sender and recipient balances
+    const senderBalance = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-balance",
+      [Cl.principal(sender)],
+      sender
+    );
+    const recipientBalance = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-balance",
+      [Cl.principal(recipient)],
+      sender
+    );
+    expect(senderBalance.result).toBeOk(Cl.uint(transferAmount));
+    expect(recipientBalance.result).toBeOk(Cl.uint(transferAmount));
+  });
+  it("transfer(): succeeds with a memo", () => {
     // ARRANGE
     const sender = accounts.get("deployer")!;
     const recipient = accounts.get("wallet_1")!;
@@ -471,45 +516,98 @@ describe("USABTC Functions", () => {
   });
   it("enable-exit-tax(): fails if called by contract deployer", () => {
     // ARRANGE
+    const sender = accounts.get("deployer")!;
     // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      sender
+    );
     // ASSERT
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_NOT_CUSTODIAN_WALLET));
   });
   it("enable-exit-tax(): fails if not called by custodian wallet", () => {
     // ARRANGE
+    const impersonator = accounts.get("wallet_2")!;
     // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      impersonator
+    );
     // ASSERT
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_NOT_CUSTODIAN_WALLET));
   });
-  it("enable-exit-tax(): succeeds, set exit tax values, prints event", () => {
+  it("enable-exit-tax(): succeeds and sets exit tax values", () => {
+    // TODO
     // ARRANGE
     // ACT
     // ASSERT
   });
   it("disable-exit-tax(): fails if called by contract deployer", () => {
     // ARRANGE
+    const sender = accounts.get("deployer")!;
     // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "disable-exit-tax",
+      [],
+      sender
+    );
     // ASSERT
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_NOT_CUSTODIAN_WALLET));
   });
   it("disable-exit-tax(): fails if not called by custodian wallet", () => {
     // ARRANGE
+    const impersonator = accounts.get("wallet_2")!;
     // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "disable-exit-tax",
+      [],
+      impersonator
+    );
     // ASSERT
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_NOT_CUSTODIAN_WALLET));
   });
   it("disable-exit-tax(): succeeds, set exit tax values, prints event", () => {
+    // TODO
     // ARRANGE
     // ACT
     // ASSERT
   });
   it("update-custodian-wallet(): fails if not called by custodian wallet", () => {
     // ARRANGE
+    const impersonator = accounts.get("wallet_2")!;
     // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(impersonator)],
+      impersonator
+    );
     // ASSERT
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_NOT_CUSTODIAN_WALLET));
   });
   it("update-custodian-wallet(): fails if new custodian wallet matches current", () => {
     // ARRANGE
+    const sender = accounts.get("deployer")!;
     // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(sender)],
+      sender
+    );
     // ASSERT
+    expect(response.result).toBeErr(
+      Cl.uint(ErrCode.ERR_SAME_AS_CURRENT_CUSTODIAN)
+    );
   });
   it("update-custodian-wallet(): succeeds, set custodian wallet, print event", () => {
+    // TODO
     // ARRANGE
     // ACT
     // ASSERT
@@ -517,22 +615,55 @@ describe("USABTC Functions", () => {
   it("get-exit-tax-values(): returns the exit tax values", () => {
     // ARRANGE
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-values",
+      [],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toBeTuple({
+      "active-exit-tax": Cl.uint(0),
+      "active-exit-tax-activation-block": Cl.uint(0),
+      "previous-exit-tax": Cl.uint(0),
+    });
   });
   it("get-current-exit-tax(): returns the current exit tax", () => {
     // ARRANGE
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-current-exit-tax",
+      [],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toStrictEqual(Cl.uint(0));
   });
   it("get-exit-tax-for-amount(): returns the exit tax for an amount", () => {
     // ARRANGE
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(depositAmount)],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toStrictEqual(Cl.uint(0));
   });
   it("get-custodian-wallet(): returns the custodian wallet", () => {
     // ARRANGE
+    const sender = accounts.get("deployer")!;
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-custodian-wallet",
+      [],
+      sender
+    );
     // ASSERT
+    expect(response.result).toStrictEqual(Cl.principal(sender));
   });
 });
 

@@ -137,6 +137,36 @@ plan:
       transactions: []
       epoch: "2.1"
     - id: 28
+      transactions: []
+      epoch: "2.1"
+    - id: 29
+      transactions: []
+      epoch: "2.1"
+    - id: 30
+      transactions: []
+      epoch: "2.1"
+    - id: 31
+      transactions: []
+      epoch: "2.1"
+    - id: 32
+      transactions: []
+      epoch: "2.1"
+    - id: 33
+      transactions: []
+      epoch: "2.1"
+    - id: 34
+      transactions: []
+      epoch: "2.1"
+    - id: 35
+      transactions: []
+      epoch: "2.1"
+    - id: 36
+      transactions: []
+      epoch: "2.1"
+    - id: 37
+      transactions: []
+      epoch: "2.1"
+    - id: 38
       transactions:
         - emulated-contract-publish:
             contract-name: sbtc-registry
@@ -163,36 +193,6 @@ plan:
             emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
             path: contracts/usabtc-token.clar
             clarity-version: 2
-      epoch: "3.0"
-    - id: 29
-      transactions: []
-      epoch: "3.0"
-    - id: 30
-      transactions: []
-      epoch: "3.0"
-    - id: 31
-      transactions: []
-      epoch: "3.0"
-    - id: 32
-      transactions: []
-      epoch: "3.0"
-    - id: 33
-      transactions: []
-      epoch: "3.0"
-    - id: 34
-      transactions: []
-      epoch: "3.0"
-    - id: 35
-      transactions: []
-      epoch: "3.0"
-    - id: 36
-      transactions: []
-      epoch: "3.0"
-    - id: 37
-      transactions: []
-      epoch: "3.0"
-    - id: 38
-      transactions: []
       epoch: "3.0"
     - id: 39
       transactions: []
@@ -240,5 +240,65 @@ plan:
       transactions: []
       epoch: "3.0"
     - id: 54
+      transactions: []
+      epoch: "3.0"
+    - id: 55
+      transactions: []
+      epoch: "3.0"
+    - id: 56
+      transactions: []
+      epoch: "3.0"
+    - id: 57
+      transactions: []
+      epoch: "3.0"
+    - id: 58
+      transactions: []
+      epoch: "3.0"
+    - id: 59
+      transactions: []
+      epoch: "3.0"
+    - id: 60
+      transactions: []
+      epoch: "3.0"
+    - id: 61
+      transactions: []
+      epoch: "3.0"
+    - id: 62
+      transactions: []
+      epoch: "3.0"
+    - id: 63
+      transactions: []
+      epoch: "3.0"
+    - id: 64
+      transactions: []
+      epoch: "3.0"
+    - id: 65
+      transactions: []
+      epoch: "3.0"
+    - id: 66
+      transactions: []
+      epoch: "3.0"
+    - id: 67
+      transactions: []
+      epoch: "3.0"
+    - id: 68
+      transactions: []
+      epoch: "3.0"
+    - id: 69
+      transactions: []
+      epoch: "3.0"
+    - id: 70
+      transactions: []
+      epoch: "3.0"
+    - id: 71
+      transactions: []
+      epoch: "3.0"
+    - id: 72
+      transactions: []
+      epoch: "3.0"
+    - id: 73
+      transactions: []
+      epoch: "3.0"
+    - id: 74
       transactions: []
       epoch: "3.0"
