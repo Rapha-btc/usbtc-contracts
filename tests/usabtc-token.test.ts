@@ -122,12 +122,26 @@ describe("SIP-010 Functions", () => {
   it("get-symbol(): returns the token symbol", () => {
     // ARRANGE
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-symbol",
+      [],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toBeOk(Cl.stringAscii("USABTC"));
   });
   it("get-decimals(): returns the token decimals", () => {
     // ARRANGE
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-decimals",
+      [],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toBeOk(Cl.uint(8));
   });
   it("get-balance(): returns the balance of an account", () => {
     // ARRANGE
@@ -136,13 +150,30 @@ describe("SIP-010 Functions", () => {
   });
   it("get-total-supply(): returns the total supply of the token", () => {
     // ARRANGE
+
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-total-supply",
+      [],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toBeOk(Cl.uint(0));
   });
   it("get-token-uri(): returns the token URI", () => {
     // ARRANGE
     // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-token-uri",
+      [],
+      accounts.get("deployer")!
+    );
     // ASSERT
+    expect(response.result).toBeOk(
+      Cl.some(Cl.stringUtf8("https://usabtc.org/token-metadata.json"))
+    );
   });
 });
 
