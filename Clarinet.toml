@@ -16,6 +16,16 @@ path = 'contracts/usabtc-token.clar'
 clarity_version = 2
 epoch = 3.0
 
+[contracts.sbtc-registry]
+path = 'contracts/sbtc/sbtc-registry.clar'
+clarity_version = 2
+epoch = 3.0
+
+[contracts.sbtc-token]
+path = 'contracts/sbtc/sbtc-token.clar'
+clarity_version = 2
+epoch = 3.0
+
 [repl.analysis]
 passes = ['check_checker']
 
