@@ -37,4 +37,5 @@ jobs:
         with:
           files: ./coverage.lcov
           token: ${{ secrets.CODECOV_TOKEN }}
-          config: ./codecov.yml
+          paths-ignore:
+            - "contracts/sbtc/**"
