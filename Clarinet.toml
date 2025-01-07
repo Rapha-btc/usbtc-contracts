@@ -14,7 +14,7 @@ contract_id = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token'
 [contracts.usabtc-token]
 path = 'contracts/usabtc-token.clar'
 clarity_version = 2
-epoch = 2.5
+epoch = 3.0
 
 [repl.analysis]
 passes = ['check_checker']
