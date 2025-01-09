@@ -649,6 +649,287 @@ describe("USABTC Functions", () => {
   });
 });
 
+describe("USABTC Exit Tax Precision", () => {
+  it("get-exit-tax-for-amount(): calculates correct tax for the smallest amount", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+    const smallestAmount = 10; // 0.0000001 BTC
+    const expectedTaxAmount = 1; // 0.00000001 BTC (1 sat)
+
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+
+    // enable exit tax
+    const enableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      custodian
+    );
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+
+    // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(smallestAmount)],
+      sender
+    );
+
+    // ASSERT
+    // 10% of 0.00001 BTC should be 0.000001 BTC (100 satoshis)
+    expect(response.result).toStrictEqual(Cl.uint(expectedTaxAmount));
+  });
+  it("get-exit-tax-for-amount(): calculates correct tax for small amounts", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+    const smallAmount = 1000; // 0.00001 BTC
+    const expectedTaxAmount = 100; // 0.000001 BTC (100 sat)
+
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+
+    // enable exit tax
+    const enableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      custodian
+    );
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+
+    // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(smallAmount)],
+      sender
+    );
+
+    // ASSERT
+    // 10% of 0.00001 BTC should be 0.000001 BTC (100 satoshis)
+    expect(response.result).toStrictEqual(Cl.uint(expectedTaxAmount));
+  });
+
+  it("get-exit-tax-for-amount(): maintains precision for large amounts", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+    const largeAmount = 10000000000n; // 100 BTC
+
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+
+    // enable exit tax
+    const enableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      custodian
+    );
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+
+    // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(largeAmount)],
+      sender
+    );
+
+    // ASSERT
+    // 10% of 100 BTC should be 10 BTC (1,000,000,000 satoshis)
+    expect(response.result).toStrictEqual(Cl.uint(1000000000));
+  });
+
+  it("get-exit-tax-for-amount(): maintains precision for odd amounts", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+    const oddAmount = 123456789n; // 1.23456789 BTC
+    const oddAmount2 = 987654321n; // 9.87654321 BTC
+
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+
+    // enable exit tax
+    const enableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      custodian
+    );
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+
+    // ACT
+    const response = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(oddAmount)],
+      sender
+    );
+
+    const response2 = simnet.callReadOnlyFn(
+      usabtcTokenContract,
+      "get-exit-tax-for-amount",
+      [Cl.uint(oddAmount2)],
+      sender
+    );
+
+    // ASSERT
+    // 10% of 1.23456789 BTC should be 0.12345678 BTC (12,345,678 satoshis)
+    expect(response.result).toStrictEqual(Cl.uint(12345678));
+    // 10% of 9.87654321 BTC should be 0.98765432 BTC (98,765,432 satoshis)
+    expect(response2.result).toStrictEqual(Cl.uint(98765432));
+  });
+
+  // this test verifies the full withdrawal flow with the smallest amount
+  it("withdraw(): handles smallest amount correctly with active exit tax", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+    const smallestAmount = 10; // 0.0000001 BTC
+    const expectedTaxAmount = 1; // 0.00000001 BTC (1 sat)
+
+    // mint sBTC for the sender
+    mintSBTC(smallestAmount, sender);
+
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(smallestAmount)],
+      sender
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(smallestAmount));
+
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+
+    // enable exit tax
+    const enableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      custodian
+    );
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+
+    // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "withdraw",
+      [Cl.uint(smallestAmount)],
+      sender
+    );
+
+    // ASSERT
+    // Should succeed and return amount minus tax
+    expect(response.result).toBeOk(Cl.uint(smallestAmount - expectedTaxAmount));
+  });
+
+  // This test verifies the full withdrawal flow with a small amount
+  it("withdraw(): handles small amounts correctly with active exit tax", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+    const smallAmount = 1000; // 0.00001 BTC
+    const expectedTaxAmount = 100; // 0.000001 BTC (10% of smallAmount)
+
+    // mint sBTC for the sender
+    mintSBTC(smallAmount, sender);
+
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(smallAmount)],
+      sender
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(smallAmount));
+
+    // set custodian
+    const updateCustodianResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+    expect(updateCustodianResponse.result).toBeOk(Cl.bool(true));
+
+    // enable exit tax
+    const enableExitTaxResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "enable-exit-tax",
+      [],
+      custodian
+    );
+    expect(enableExitTaxResponse.result).toBeOk(Cl.bool(true));
+
+    // skip to when exit tax is active
+    simnet.mineEmptyBurnBlocks(exitTaxDelay);
+
+    // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "withdraw",
+      [Cl.uint(smallAmount)],
+      sender
+    );
+
+    // ASSERT
+    // Should succeed and return amount minus tax
+    expect(response.result).toBeOk(Cl.uint(smallAmount - expectedTaxAmount));
+  });
+});
+
 describe("USABTC Integration Tests", () => {
   it("accurately tracks multiple deposits and withdrawals", () => {
     // ARRANGE
