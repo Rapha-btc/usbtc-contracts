@@ -36,6 +36,7 @@
 (define-constant USABTC_CONTRACT (as-contract tx-sender))
 
 ;; exit tax
+(define-constant USABTC_MINIMUM_WITHDRAWAL u10) ;; minimum withdrawal amount
 (define-constant USABTC_EXIT_TAX u10) ;; 10% exit tax
 (define-constant EXIT_TAX_DELAY u21000) ;; approx 4.8 months in Bitcoin block time
 
@@ -123,6 +124,8 @@
     )
     ;; check that user has enough USABTC
     (asserts! (>= sender-balance amount) ERR_INSUFFICIENT_BALANCE)
+    ;; check that amount is more than the minimum
+    (asserts! (>= amount USABTC_MINIMUM_WITHDRAWAL) ERR_INVALID_AMOUNT)
     ;; burn USABTC
     (try! (ft-burn? usabtc amount sender))
     ;; transfer sBTC tax to the custodian if > 0
@@ -156,9 +159,11 @@
     (asserts! (not (is-eq tx-sender USABTC_CONTRACT_DEPLOYER)) ERR_NOT_CUSTODIAN_WALLET)
     ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
-    ;; set exit tax values
-    (var-set previous-exit-tax (var-get active-exit-tax))
+    ;; set previous if no change is pending
+    (and (not (is-change-pending)) (var-set previous-exit-tax (var-get active-exit-tax)))
+    ;; set active to 10 with constant
     (var-set active-exit-tax USABTC_EXIT_TAX)
+    ;; update activation block
     (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
     ;; print event
     (print {
@@ -179,9 +184,11 @@
     (asserts! (not (is-eq tx-sender USABTC_CONTRACT_DEPLOYER)) ERR_NOT_CUSTODIAN_WALLET)
     ;; verify sender is custodian
     (asserts! (is-eq tx-sender (var-get custodian-trust-wallet)) ERR_NOT_CUSTODIAN_WALLET)
-    ;; set exit tax values
-    (var-set previous-exit-tax (var-get active-exit-tax))
+    ;; set previous if no change is pending
+    (and (not (is-change-pending)) (var-set previous-exit-tax (var-get active-exit-tax)))
+    ;; set active to 0
     (var-set active-exit-tax u0)
+    ;; update activation block
     (var-set active-exit-tax-activation-block (+ burn-block-height EXIT_TAX_DELAY))
     ;; print event
     (print {
@@ -220,6 +227,10 @@
 ;;
 
 ;; exit tax functions
+
+(define-read-only (is-change-pending)
+  (> (var-get active-exit-tax-activation-block) burn-block-height)
+)
 
 (define-read-only (get-exit-tax-values)
   {

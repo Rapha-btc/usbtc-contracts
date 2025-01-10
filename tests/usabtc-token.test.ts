@@ -735,7 +735,7 @@ describe("USABTC Exit Tax Precision", () => {
     // ARRANGE
     const sender = accounts.get("deployer")!;
     const custodian = accounts.get("wallet_1")!;
-    const largeAmount = 10000000000n; // 100 BTC
+    const largeAmount = 10000000000; // 100 BTC
 
     // set custodian
     const updateCustodianResponse = simnet.callPublicFn(
@@ -775,8 +775,8 @@ describe("USABTC Exit Tax Precision", () => {
     // ARRANGE
     const sender = accounts.get("deployer")!;
     const custodian = accounts.get("wallet_1")!;
-    const oddAmount = 123456789n; // 1.23456789 BTC
-    const oddAmount2 = 987654321n; // 9.87654321 BTC
+    const oddAmount = 123456789; // 1.23456789 BTC
+    const oddAmount2 = 987654321; // 9.87654321 BTC
 
     // set custodian
     const updateCustodianResponse = simnet.callPublicFn(
@@ -819,6 +819,54 @@ describe("USABTC Exit Tax Precision", () => {
     expect(response.result).toStrictEqual(Cl.uint(12345678));
     // 10% of 9.87654321 BTC should be 0.98765432 BTC (98,765,432 satoshis)
     expect(response2.result).toStrictEqual(Cl.uint(98765432));
+  });
+
+  // verify under minimum fails
+  it("withdraw(): fails if amount is less than 0.00000010 BTC minimum", () => {
+    // ARRANGE
+    const wallet_1 = accounts.get("wallet_1")!;
+    const wallet_2 = accounts.get("wallet_2")!;
+    const oneSat = 1;
+    const nineSats = 9;
+
+    // mint sBTC to all wallets
+    mintSBTC(oneSat, wallet_1);
+    mintSBTC(nineSats, wallet_2);
+
+    // deposit sBTC to mint USABTC
+    const depositResponse = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(oneSat)],
+      wallet_1
+    );
+    expect(depositResponse.result).toBeOk(Cl.uint(oneSat));
+    const depositResponse2 = simnet.callPublicFn(
+      usabtcTokenContract,
+      "deposit",
+      [Cl.uint(nineSats)],
+      wallet_2
+    );
+    expect(depositResponse2.result).toBeOk(Cl.uint(nineSats));
+
+    // ACT
+    const response = simnet.callPublicFn(
+      usabtcTokenContract,
+      "withdraw",
+      [Cl.uint(oneSat)],
+      wallet_1
+    );
+    const response2 = simnet.callPublicFn(
+      usabtcTokenContract,
+      "withdraw",
+      [Cl.uint(nineSats)],
+      wallet_2
+    );
+
+    // ASSERT
+    // Should fail because amount is less than minimum
+    expect(response.result).toBeErr(Cl.uint(ErrCode.ERR_INVALID_AMOUNT));
+    expect(response2.result).toBeErr(Cl.uint(ErrCode.ERR_INVALID_AMOUNT));
   });
 
   // this test verifies the full withdrawal flow with the smallest amount
@@ -927,6 +975,139 @@ describe("USABTC Exit Tax Precision", () => {
     // ASSERT
     // Should succeed and return amount minus tax
     expect(response.result).toBeOk(Cl.uint(smallAmount - expectedTaxAmount));
+  });
+});
+
+describe("USABTC Exit Tax Value Transitions", () => {
+  it("maintains correct tax values through multiple rapid toggles", () => {
+    // ARRANGE
+    const sender = accounts.get("deployer")!;
+    const custodian = accounts.get("wallet_1")!;
+
+    // Set custodian
+    simnet.callPublicFn(
+      usabtcTokenContract,
+      "update-custodian-wallet",
+      [Cl.principal(custodian)],
+      sender
+    );
+
+    // Function to check current values
+    const checkValues = () => {
+      const values = simnet.callReadOnlyFn(
+        usabtcTokenContract,
+        "get-exit-tax-values",
+        [],
+        sender
+      ).result;
+
+      const valuesObj = extractExitTaxValues(values as TupleCV);
+      // console.log("Current state:", JSON.stringify(valuesObj, null, 2));
+
+      // Both values should always be either 0 or 10
+      const activeExitTax = valuesObj.activeExitTax;
+      const previousExitTax = valuesObj.previousExitTax;
+
+      expect(activeExitTax === 0 || activeExitTax === 10).toBe(true);
+      expect(previousExitTax === 0 || previousExitTax === 10).toBe(true);
+
+      return valuesObj;
+    };
+
+    // Initial check
+    let valuesObj = checkValues();
+    expect(valuesObj.activeExitTax).toStrictEqual(0);
+    expect(valuesObj.previousExitTax).toStrictEqual(0);
+
+    const actionTests = new Map([
+      [
+        "first enable",
+        {
+          action: "enable-exit-tax",
+          expectedActive: 10,
+          expectedPrevious: 0,
+          description: "Initial enable, sets previous to 0",
+        },
+      ],
+      [
+        "rapid disable before activation",
+        {
+          action: "disable-exit-tax",
+          expectedActive: 0,
+          // Previous should still be 0 since first change hasn't activated
+          expectedPrevious: 0,
+          description: "Disable while first enable pending",
+        },
+      ],
+      [
+        "rapid re-enable",
+        {
+          action: "enable-exit-tax",
+          expectedActive: 10,
+          // Previous still 0 as no changes have activated
+          expectedPrevious: 0,
+          description: "Re-enable while changes pending",
+        },
+      ],
+      [
+        "wait for activation",
+        {
+          action: "skip-blocks",
+          blocks: exitTaxDelay,
+          expectedActive: 10,
+          expectedPrevious: 0,
+          description: "Let changes activate",
+        },
+      ],
+      [
+        "disable after activation",
+        {
+          action: "disable-exit-tax",
+          expectedActive: 0,
+          // Now previous should be 10 since changes have activated
+          expectedPrevious: 10,
+          description: "Disable after activation",
+        },
+      ],
+      [
+        "final enable",
+        {
+          action: "enable-exit-tax",
+          expectedActive: 10,
+          // Previous stays at 10 until this change activates
+          expectedPrevious: 10,
+          description: "Final state change",
+        },
+      ],
+    ]);
+
+    for (const [_, test] of actionTests) {
+      // console.log(`\nExecuting: ${testName}`);
+
+      if (test.action === "skip-blocks") {
+        simnet.mineEmptyBurnBlocks(test.blocks);
+      } else {
+        // Perform action
+        const response = simnet.callPublicFn(
+          usabtcTokenContract,
+          test.action,
+          [],
+          custodian
+        );
+        expect(response.result).toBeOk(Cl.bool(true));
+        simnet.mineEmptyBlock();
+      }
+
+      // Check values
+      valuesObj = checkValues();
+      expect(valuesObj.activeExitTax).toStrictEqual(test.expectedActive);
+      expect(valuesObj.previousExitTax).toStrictEqual(test.expectedPrevious);
+    }
+
+    // Final state check
+    valuesObj = checkValues();
+    expect(valuesObj.activeExitTax).toStrictEqual(10);
+    expect(valuesObj.previousExitTax).toStrictEqual(10);
   });
 });
 
