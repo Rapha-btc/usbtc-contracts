@@ -218,9 +218,7 @@
 
 (define-public (disable-exit-tax (uuid (string-ascii 36)) (signature (buff 65)))
   (if (map-insert submitted-gov-uuids uuid true)
-    (begin
-      ;; verify sender is not deployer
-      (asserts! (not (is-eq tx-sender USABTC_CONTRACT_DEPLOYER)) ERR_NOT_CUSTODIAN_WALLET)  
+    (begin 
       ;; Verify Bitcoin treasury signature
       (asserts! (is-btc-usa-treasurer "DISABLE_EXIT_TAX" uuid signature) ERR_NOT_CUSTODIAN_WALLET)
       ;; set previous if no change is pending
